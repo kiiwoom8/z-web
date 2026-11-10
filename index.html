@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>z</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="preconnect" href="https://script.google.com">
+<link rel="preconnect" href="https://script.googleusercontent.com">
+<style>
+  :root { color-scheme: light dark; --bg: #ffffff; --ink: #1b1f24; --muted: #6b7280; --accent: #2f6fed; --line: #e6e8ec; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0f1216; --ink: #e8eaed; --muted: #9aa3ad; --accent: #7aa2ff; --line: #23282f; } }
+  html, body { height: 100%; margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.5 -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif; }
+  .boot { min-height: 100%; display: grid; place-items: center; padding: 24px; box-sizing: border-box; text-align: center; }
+  .logo { width: 64px; height: 64px; border-radius: 16px; background: #2f6fed; color: #fff; display: grid; place-items: center;
+    font: 700 36px/1 system-ui, sans-serif; margin: 0 auto 18px; }
+  #msg { color: var(--muted); max-width: 320px; margin: 0 auto; white-space: pre-line; }
+  button { appearance: none; border: 1px solid var(--accent); background: var(--accent); color: #fff; font: inherit; font-weight: 600;
+    padding: 9px 16px; border-radius: 10px; margin-top: 18px; }
+  button[hidden] { display: none; }
+</style>
+</head>
+<body>
+<div class="boot"><div><div class="logo">z</div><div id="msg">불러오는 중…</div><button type="button" id="retry" hidden>다시 시도</button></div></div>
+<script>
+/* z web loader (docs/ARCHITECTURE.md → No-login web page). Lives in this repo as web/index.html and is published as
+   is to the public repo kiiwoom8/z-web (GitHub Pages, https://kiiwoom8.github.io/z-web/) by tools/publish_web.sh.
+   Pages served by Apps Script itself carry Google's "This application was created by a Google Apps Script user"
+   banner; this page is not, so it has none. It holds no code of z and no data: it asks the z app API deployment
+   for the shell (doPost 'shell': index.html with window.zWeb set) and writes it into itself; the shell then verifies
+   this browser (device key) and does everything else through the same API.
+   The newest shell is kept in the Cache API: the page starts from it at once and fetches a changed shell for the
+   next start (the server answers with only a hash when nothing changed). */
+(function () {
+  "use strict";
+  var API = "https://script.google.com/macros/s/AKfycbxwj-mGgYm49r85I8YaZrTEPAb7qeL3ylEKBtpx0VwHN9-NIEIlEsSKuYaZrot3-G0n/exec";
+  var CACHE = "z-html", KEY = "z-shell";
+  function noop() {}
+  function cacheGet() {
+    try {
+      if (!window.caches) return Promise.resolve(null);
+      return caches.open(CACHE).then(function (c) { return c.match(KEY); })
+        .then(function (r) { return r ? r.json() : null; }).catch(function () { return null; });
+    } catch (e) { return Promise.resolve(null); }
+  }
+  function cachePut(v) {
+    try { if (window.caches) caches.open(CACHE).then(function (c) { return c.put(KEY, new Response(JSON.stringify(v))); }).catch(noop); }
+    catch (e) {}
+  }
+  function fetchShell(have) {
+    return fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ fn: "shell", args: [have || ""] }) }).then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    }).then(function (r) {
+      if (!r || !r.ok) throw new Error(String(r && r.error || "no answer"));
+      var v = JSON.parse(r.v);
+      if (typeof v.html === "string") cachePut(v);
+      return v;
+    });
+  }
+  function show(html) { document.open(); document.write(html); document.close(); }
+  function start() {
+    document.getElementById("msg").textContent = "불러오는 중…";
+    document.getElementById("retry").hidden = true;
+    cacheGet().then(function (c) {
+      if (c && typeof c.html === "string") { fetchShell(c.h).catch(noop); show(c.html); return; }
+      return fetchShell("").then(function (v) { show(v.html); });
+    }).catch(function (e) {
+      document.getElementById("msg").textContent = "서버에 연결하지 못했어요.\n" + (e && e.message || e);
+      document.getElementById("retry").hidden = false;
+    });
+  }
+  document.getElementById("retry").addEventListener("click", start);
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start); else start();
+})();
+</script>
+</body>
+</html>
